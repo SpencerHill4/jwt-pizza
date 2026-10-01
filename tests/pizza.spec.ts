@@ -15,6 +15,30 @@ async function basicInit(page: Page) {
   };
 
   await page.route("*/**/api/auth", async (route) => {
+    if (route.request().method() === "DELETE") {
+      await route.fulfill({ json: {} });
+      return;
+    }
+
+    if (route.request().method() === "POST") {
+      const registrationReq = route.request().postDataJSON() as {
+        name: string;
+        email: string;
+        password: string;
+      };
+      const user: User = {
+        id: "4",
+        name: registrationReq.name,
+        email: registrationReq.email,
+        password: registrationReq.password,
+        roles: [{ role: Role.Diner }],
+      };
+      validUsers[registrationReq.email] = user;
+      loggedInUser = user;
+      await route.fulfill({ json: { user, token: "abcdef" } });
+      return;
+    }
+
     const loginReq = route.request().postDataJSON();
     const user = validUsers[loginReq.email];
     if (!user || user.password !== loginReq.password) {
@@ -77,6 +101,13 @@ async function basicInit(page: Page) {
   });
 
   await page.route("*/**/api/order", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        json: { id: "3", dinerId: "3", orders: [] },
+      });
+      return;
+    }
+
     const orderReq = route.request().postDataJSON();
     const orderRes = {
       order: { ...orderReq, id: 23 },
@@ -97,6 +128,18 @@ test("login", async ({ page }) => {
   await page.getByRole("button", { name: "Login" }).click();
 
   await expect(page.getByRole("link", { name: "KC" })).toBeVisible();
+});
+
+test("register", async ({ page }) => {
+  await basicInit(page);
+
+  await page.getByRole("link", { name: "Register" }).click();
+  await page.getByPlaceholder("Full name").fill("Ada Lovelace");
+  await page.getByPlaceholder("Email address").fill("ada@jwt.com");
+  await page.getByPlaceholder("Password").fill("a");
+  await page.getByRole("button", { name: "Register" }).click();
+
+  await expect(page.getByRole("link", { name: "AL" })).toBeVisible();
 });
 
 test("purchase with login", async ({ page }) => {
@@ -124,4 +167,85 @@ test("purchase with login", async ({ page }) => {
   await page.getByRole("button", { name: "Pay now" }).click();
 
   await expect(page.getByText("0.008")).toBeVisible();
+});
+
+test("about page", async ({ page }) => {
+  await basicInit(page);
+
+  await page.getByRole("link", { name: "About" }).click();
+  await expect(page.getByRole("main")).toContainText("The secret sauce");
+  await expect(
+    page.getByRole("img", { name: "Employee stock photo" }).first(),
+  ).toBeVisible();
+});
+
+test("history page", async ({ page }) => {
+  await basicInit(page);
+
+  await page.getByRole("link", { name: "History" }).click();
+  await expect(page.getByRole("heading")).toContainText("Mama Rucci, my my");
+  await expect(page.getByRole("main").getByRole("img")).toBeVisible();
+});
+
+test("diner dashboard", async ({ page }) => {
+  await basicInit(page);
+
+  await page.getByRole("link", { name: "Login" }).click();
+  await page.getByRole("textbox", { name: "Email address" }).fill("d@jwt.com");
+  await page.getByRole("textbox", { name: "Password" }).fill("a");
+  await page.getByRole("button", { name: "Login" }).click();
+
+  await page.getByRole("link", { name: "KC" }).click();
+  await expect(page.getByRole("heading")).toContainText("Your pizza kitchen");
+  await expect(
+    page.getByRole("img", { name: "Employee stock photo" }),
+  ).toBeVisible();
+  await expect(page.getByRole("main")).toContainText(
+    "name: Kai Chenemail: d@jwt.comrole: diner",
+  );
+});
+
+test("franchise dashboard as non-franchisee", async ({ page }) => {
+  await basicInit(page);
+
+  await page
+    .getByRole("navigation", { name: "Global" })
+    .getByRole("link", { name: "Franchise" })
+    .click();
+  await expect(page.getByRole("main")).toContainText(
+    "So you want a piece of the pie?",
+  );
+  await expect(page.locator("thead")).toContainText("Profit");
+  await expect(page.locator("tbody")).toContainText("150 ₿");
+  await expect(page.getByRole("main")).toContainText("Unleash Your Potential");
+
+  await expect(page.getByRole("link", { name: "-555-5555" })).toBeVisible();
+});
+
+test("register new user", async ({ page }) => {
+  await basicInit(page);
+
+  await page.getByRole("link", { name: "Register" }).click();
+  await page.getByRole("textbox", { name: "Full name" }).fill("New User");
+  await page
+    .getByRole("textbox", { name: "Email address" })
+    .fill("new@jwt.com");
+  await page.getByRole("textbox", { name: "Password" }).fill("a");
+  await page.getByRole("button", { name: "Register" }).click();
+
+  await expect(page.getByRole("link", { name: "NU" })).toBeVisible();
+});
+
+test("logout", async ({ page }) => {
+  await basicInit(page);
+
+  await page.getByRole("link", { name: "Login" }).click();
+  await page.getByRole("textbox", { name: "Email address" }).fill("d@jwt.com");
+  await page.getByRole("textbox", { name: "Password" }).fill("a");
+  await page.getByRole("button", { name: "Login" }).click();
+  await expect(page.getByRole("link", { name: "KC" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Logout" }).click();
+  await expect(page.getByRole("link", { name: "Login" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Register" })).toBeVisible();
 });
