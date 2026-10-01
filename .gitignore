@@ -13,5 +13,4 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
-.nycrc.json
 .nyc_output
