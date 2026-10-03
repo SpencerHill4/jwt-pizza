@@ -1,8 +1,12 @@
 import { Page } from "@playwright/test";
 import { test, expect } from "./testSetup";
-import { Role, User } from "../src/service/pizzaService";
+import { Order, Role, User } from "../src/service/pizzaService";
 
-async function basicInit(page: Page) {
+async function basicInit(
+  page: Page,
+  orders: Order[] = [],
+  verificationFails = false,
+) {
   let loggedInUser: User | undefined;
   const validUsers: Record<string, User> = {
     "d@jwt.com": {
@@ -103,7 +107,7 @@ async function basicInit(page: Page) {
   await page.route("*/**/api/order", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
-        json: { id: "3", dinerId: "3", orders: [] },
+        json: { id: "3", dinerId: "3", orders },
       });
       return;
     }
@@ -117,8 +121,91 @@ async function basicInit(page: Page) {
     await route.fulfill({ json: orderRes });
   });
 
+  await page.route("**/api/order/verify", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ jwt: "eyJpYXQ" });
+    if (verificationFails) {
+      await route.fulfill({
+        status: 400,
+        json: { message: "Invalid JWT" },
+      });
+      return;
+    }
+    await route.fulfill({
+      json: { message: "valid", payload: "Order verified" },
+    });
+  });
+
   await page.goto("/");
 }
+
+async function orderPizza(page: Page) {
+  await page.getByRole("button", { name: "Order now" }).click();
+  await page.getByRole("combobox").selectOption("4");
+  await page.getByRole("link", { name: "Image Description Veggie A" }).click();
+  await page.getByRole("button", { name: "Checkout" }).click();
+  await page.getByPlaceholder("Email address").fill("d@jwt.com");
+  await page.getByPlaceholder("Password").fill("a");
+  await page.getByRole("button", { name: "Login" }).click();
+  await page.getByRole("button", { name: "Pay now" }).click();
+  await expect(page.getByRole("heading")).toContainText("Here is your JWT Pizza!");
+}
+
+const docsResponse = {
+  endpoints: [
+    {
+      requiresAuth: true,
+      method: "POST",
+      path: "/api/order",
+      description: "Place a pizza order",
+      example: '{ "items": [] }',
+      response: { id: "23" },
+    },
+    {
+      requiresAuth: false,
+      method: "GET",
+      path: "/api/order/menu",
+      description: "Get the pizza menu",
+      example: "",
+      response: [{ id: "1", title: "Veggie" }],
+    },
+  ],
+};
+
+async function expectDocs(page: Page, path: string, apiHost: string) {
+  let docsUrl = "";
+  await page.route("**/api/docs", async (route) => {
+    expect(route.request().method()).toBe("GET");
+    docsUrl = route.request().url();
+    await route.fulfill({ json: docsResponse });
+  });
+
+  await page.goto(path);
+  await expect(page.getByRole("heading", { name: "JWT Pizza API" })).toBeVisible();
+  await expect(
+    page.getByRole("heading").filter({ hasText: "[POST] /api/order" }),
+  ).toContainText("🔐");
+  await expect(page.getByText("Place a pizza order")).toBeVisible();
+  await expect(page.getByText('{ "items": [] }')).toBeVisible();
+  await expect(page.locator("pre").first()).toContainText('"id": "23"');
+  await expect(
+    page.getByRole("heading").filter({ hasText: "[GET] /api/order/menu" }),
+  ).toBeVisible();
+  await expect(page.getByText("Get the pizza menu")).toBeVisible();
+  await expect(page.locator('a[href*="localhost:3000"]')).toBeVisible();
+  await expect(page.locator('a[href*="pizza-factory"]')).toBeVisible();
+  expect(new URL(docsUrl).hostname).toContain(apiHost);
+}
+
+test("service API docs are displayed", async ({ page }) => {
+  await basicInit(page);
+  await expectDocs(page, "/docs", "localhost");
+});
+
+test("factory API docs are displayed", async ({ page }) => {
+  await basicInit(page);
+  await expectDocs(page, "/docs/factory", "pizza-factory");
+});
 
 test("login", async ({ page }) => {
   await basicInit(page);
@@ -169,6 +256,46 @@ test("purchase with login", async ({ page }) => {
   await expect(page.getByText("0.008")).toBeVisible();
 });
 
+test("delivery verifies a valid JWT", async ({ page }) => {
+  await basicInit(page);
+  await orderPizza(page);
+
+  await expect(page.getByText("order ID:").locator("..")).toContainText("23");
+  await expect(page.getByText("total:").locator("..")).toContainText("0.004 ₿");
+  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(page.locator("#hs-jwt-modal h3")).toContainText("valid");
+  await expect(page.locator("#hs-jwt-modal pre")).toContainText(
+    "Order verified",
+  );
+});
+
+test("delivery lets the diner order more", async ({ page }) => {
+  await basicInit(page);
+  await orderPizza(page);
+
+  await page.getByRole("button", { name: "Order more" }).click();
+  await expect(page.locator("h2")).toContainText("Awesome is a click away");
+});
+
+test("delivery handles missing order state", async ({ page }) => {
+  await basicInit(page);
+  await page.goto("/delivery");
+
+  await expect(page.getByRole("heading")).toContainText("Here is your JWT Pizza!");
+  await expect(page.getByText("error", { exact: true })).toBeVisible();
+});
+
+test("delivery displays an error for an invalid JWT", async ({ page }) => {
+  await basicInit(page, [], true);
+  await orderPizza(page);
+
+  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(page.locator("#hs-jwt-modal h3")).toContainText("Invalid JWT");
+  await expect(page.locator("#hs-jwt-modal pre")).toContainText(
+    "bad pizza",
+  );
+});
+
 test("about page", async ({ page }) => {
   await basicInit(page);
 
@@ -203,6 +330,37 @@ test("diner dashboard", async ({ page }) => {
   await expect(page.getByRole("main")).toContainText(
     "name: Kai Chenemail: d@jwt.comrole: diner",
   );
+});
+
+test("diner dashboard shows order history", async ({ page }) => {
+  await basicInit(page, [
+    {
+      id: "23",
+      franchiseId: "2",
+      storeId: "4",
+      date: "2026-10-02T12:00:00.000Z",
+      items: [
+        {
+          menuId: "1",
+          description: "Veggie",
+          price: 0.0038,
+        },
+      ],
+    },
+  ]);
+
+  await page.getByRole("link", { name: "Login" }).click();
+  await page.getByRole("textbox", { name: "Email address" }).fill("d@jwt.com");
+  await page.getByRole("textbox", { name: "Password" }).fill("a");
+  await page.getByRole("button", { name: "Login" }).click();
+  await page.getByRole("link", { name: "KC" }).click();
+
+  await expect(page.getByRole("heading")).toContainText("Your pizza kitchen");
+  await expect(page.getByRole("main")).toContainText(
+    "name: Kai Chenemail: d@jwt.comrole: diner",
+  );
+  await expect(page.locator("tbody")).toContainText("23");
+  await expect(page.locator("tbody")).toContainText("0.004 ₿");
 });
 
 test("franchise dashboard as non-franchisee", async ({ page }) => {

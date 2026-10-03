@@ -18,7 +18,7 @@ async function basicInit(page: Page) {
       name: "Kai Chen",
       email: "f@jwt.com",
       password: "a",
-      roles: [{ role: Role.Franchisee }],
+      roles: [{ role: Role.Franchisee, objectId: "2" }],
     },
   };
 
@@ -149,6 +149,21 @@ async function basicInit(page: Page) {
 
   await page.goto("/");
 }
+
+test("franchisee role appears on diner dashboard", async ({ page }) => {
+  await basicInit(page);
+
+  await page.getByRole("link", { name: "Login" }).click();
+  await page.getByRole("textbox", { name: "Email address" }).fill("f@jwt.com");
+  await page.getByRole("textbox", { name: "Password" }).fill("a");
+  await page.getByRole("button", { name: "Login" }).click();
+  await page.getByRole("link", { name: "KC" }).click();
+
+  await expect(page.getByRole("heading")).toContainText("Your pizza kitchen");
+  await expect(page.getByRole("main")).toContainText(
+    "name: Kai Chenemail: f@jwt.comrole: Franchisee on 2",
+  );
+});
 
 test("franchise dashboard with a franchisee", async ({ page }) => {
   await basicInit(page);
