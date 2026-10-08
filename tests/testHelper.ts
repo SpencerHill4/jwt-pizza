@@ -54,6 +54,30 @@ export async function mockAuthentication(page: Page, users: User[]) {
     expect(route.request().method()).toBe("GET");
     await route.fulfill({ json: loggedInUser });
   });
+
+  await page.route(/\/api\/user\/(?!me$)[^/]+$/, async (route) => {
+    expect(route.request().method()).toBe("PUT");
+    const updatedUser = route.request().postDataJSON() as User;
+    const existingUser = Array.from(validUsers.values()).find(
+      (user) => user.id === updatedUser.id,
+    );
+
+    expect(existingUser).toBeDefined();
+    if (!existingUser) {
+      throw new Error(`No user found with id ${updatedUser.id}`);
+    }
+    expect(updatedUser.email).toBeTruthy();
+    if (!updatedUser.email) {
+      throw new Error("Updated user must have an email");
+    }
+
+    if (existingUser.email) {
+      validUsers.delete(existingUser.email);
+    }
+    validUsers.set(updatedUser.email, updatedUser);
+    loggedInUser = updatedUser;
+    await route.fulfill({ json: { user: updatedUser, token: "abcdef" } });
+  });
 }
 
 export async function login(page: Page, email: string, password: string) {
