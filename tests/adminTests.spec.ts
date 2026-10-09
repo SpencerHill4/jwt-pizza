@@ -144,6 +144,9 @@ test("admin can filter franchises", async ({ page }) => {
 
   await openAdminDashboard(page);
 
+  await page.getByRole("button", { name: "»" }).click();
+  await expect(page.getByRole("table")).toContainText("Slice City");
+
   await page
     .getByRole("textbox", { name: "Filter franchises" })
     .fill("PizzaCorp");
@@ -151,6 +154,7 @@ test("admin can filter franchises", async ({ page }) => {
 
   await expect(page.getByRole("table")).toContainText("PizzaCorp");
   await expect(page.getByRole("table")).not.toContainText("LotaPizza");
+  await expect(page.getByRole("button", { name: "«" })).toBeDisabled();
 });
 
 test("admin can paginate franchises", async ({ page }) => {

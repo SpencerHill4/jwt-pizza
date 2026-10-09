@@ -134,8 +134,13 @@ class HttpPizzaService implements PizzaService {
     limit: number = 10,
     nameFilter: string = "*",
   ): Promise<FranchiseList> {
+    const query = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      name: nameFilter,
+    });
     return this.callEndpoint(
-      `/api/franchise?page=${page}&limit=${limit}&name=${nameFilter}`,
+      `/api/franchise?${query.toString()}`,
     );
   }
 
