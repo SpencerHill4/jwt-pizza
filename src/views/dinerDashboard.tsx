@@ -19,6 +19,7 @@ export default function DinerDashboard(props: Props) {
 
   const user = props.user || ({} as User);
   const [orders, setOrders] = React.useState<Order[]>([]);
+  const [profileError, setProfileError] = React.useState("");
 
   React.useEffect(() => {
     (async () => {
@@ -38,6 +39,7 @@ export default function DinerDashboard(props: Props) {
   }
 
   async function updateUser() {
+    setProfileError("");
     let updatedUser: User = {
       id: user.id,
       name: nameRef.current?.value,
@@ -46,12 +48,22 @@ export default function DinerDashboard(props: Props) {
       roles: user.roles,
     };
 
-    await pizzaService.updateUser(updatedUser);
-
-    props.setUser(updatedUser);
-    setTimeout(() => {
-      HSOverlay.close(document.getElementById("hs-jwt-modal")!);
-    }, 100);
+    try {
+      await pizzaService.updateUser(updatedUser);
+      props.setUser(updatedUser);
+      setTimeout(() => {
+        HSOverlay.close(document.getElementById("hs-jwt-modal")!);
+      }, 100);
+    } catch (cause) {
+      const message =
+        typeof cause === "object" &&
+        cause !== null &&
+        "message" in cause &&
+        typeof cause.message === "string"
+          ? cause.message
+          : "Unable to update your profile.";
+      setProfileError(message);
+    }
   }
 
   return (
@@ -180,6 +192,11 @@ export default function DinerDashboard(props: Props) {
               </button>
             </div>
             <div className="p-4 overflow-y-scroll max-h-52">
+              {profileError && (
+                <p role="alert" className="mb-3 text-sm text-red-600">
+                  {profileError}
+                </p>
+              )}
               <div className="my-4 text-lg text-start grid grid-cols-5 gap-2 items-center">
                 <div className="font-semibold">name:</div>
                 <input

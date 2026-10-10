@@ -57,6 +57,12 @@ async function basicInit(page: Page, role: Role = Role.Admin) {
       email: "dino@jwt.com",
       roles: [{ role: Role.Diner }],
     },
+    ...Array.from({ length: 7 }, (_, index) => ({
+      id: String(index + 14),
+      name: `Extra User ${index + 1}`,
+      email: `extra${index + 1}@jwt.com`,
+      roles: [{ role: Role.Diner }],
+    })),
   ];
   let nextFranchiseId = 5;
   await mockAuthentication(page, [
@@ -144,7 +150,7 @@ async function basicInit(page: Page, role: Role = Role.Admin) {
   await page.route(/\/api\/user(?:\?.*)?$/, async (route) => {
     expect(route.request().method()).toBe("GET");
     const url = new URL(route.request().url());
-    const pageNumber = Number(url.searchParams.get("page") ?? 1);
+    const pageNumber = Number(url.searchParams.get("page") ?? 0);
     const limit = Number(url.searchParams.get("limit") ?? 10);
     const nameFilter = (url.searchParams.get("name") ?? "*")
       .replace(/\*/g, "")
@@ -152,7 +158,7 @@ async function basicInit(page: Page, role: Role = Role.Admin) {
     const matchingUsers = users.filter((user) =>
       user.name?.toLowerCase().includes(nameFilter),
     );
-    const start = (pageNumber - 1) * limit;
+    const start = pageNumber * limit;
     const pagedUsers = matchingUsers.slice(start, start + limit);
     await route.fulfill({
       json: {
@@ -218,9 +224,10 @@ test("admin can filter and paginate users", async ({ page }) => {
   await page.getByRole("tab", { name: "Users" }).click();
 
   await expect(page.getByRole("table")).toContainText("Ada User");
-  await expect(page.getByRole("table")).not.toContainText("Dino User");
+  await expect(page.getByRole("table")).not.toContainText("Extra User 7");
   await page.getByRole("button", { name: "Next page" }).click();
-  await expect(page.getByRole("table")).toContainText("Dino User");
+  await expect(page.getByRole("table")).toContainText("Extra User 7");
+  await expect(page.getByRole("table")).not.toContainText("Ada User");
 
   await page.getByRole("textbox", { name: "Filter users" }).fill("Cora");
   await page.getByRole("button", { name: "Submit" }).click();

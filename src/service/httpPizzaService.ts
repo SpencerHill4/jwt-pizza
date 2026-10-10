@@ -146,7 +146,7 @@ class HttpPizzaService implements PizzaService {
   }
 
   async getUsers(
-    page: number = 1,
+    page: number = 0,
     limit: number = 10,
     nameFilter: string = "*",
   ): Promise<UserList> {

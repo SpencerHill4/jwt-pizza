@@ -58,3 +58,31 @@ test("franchisee can update their profile", async ({ page }) => {
 test("admin can update their profile", async ({ page }) => {
   await updateProfileForRole(page, Role.Admin);
 });
+
+test("profile update failures are shown in the edit modal", async ({ page }) => {
+  const user: User = {
+    id: "4",
+    name: "pizza diner",
+    email: "diner@jwt.com",
+    password: "diner",
+    roles: [{ role: Role.Diner }],
+  };
+
+  await mockAuthentication(page, [user]);
+  await page.route("*/**/api/user/4", async (route) => {
+    expect(route.request().method()).toBe("PUT");
+    await route.fulfill({
+      status: 500,
+      json: { message: "Profile update failed" },
+    });
+  });
+  await mockOrders(page);
+  await page.goto("/");
+  await openLogin(page, user.email!, user.password!);
+  await page.getByRole("link", { name: "pd" }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Update" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("Profile update failed");
+  await expect(page.getByRole("dialog")).toBeVisible();
+});

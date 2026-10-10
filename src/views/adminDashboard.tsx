@@ -11,6 +11,9 @@ interface Props {
   user: User | null;
 }
 
+const FRANCHISE_PAGE_SIZE = 3;
+const USER_PAGE_SIZE = 10;
+
 interface FilterPaginationProps {
   placeholder: string;
   page: number;
@@ -85,19 +88,31 @@ export default function AdminDashboard(props: Props) {
   const [franchisePage, setFranchisePage] = React.useState(0);
   const [franchiseFilter, setFranchiseFilter] = React.useState('');
   const [userList, setUserList] = React.useState<UserList>({ users: [], more: false });
-  const [userPage, setUserPage] = React.useState(1);
+  const [userPage, setUserPage] = React.useState(0);
   const [userFilter, setUserFilter] = React.useState('');
 
   React.useEffect(() => {
     (async () => {
-      setFranchiseList(await pizzaService.getFranchises(franchisePage, 3, `*${franchiseFilter}*`));
+      setFranchiseList(
+        await pizzaService.getFranchises(
+          franchisePage,
+          FRANCHISE_PAGE_SIZE,
+          `*${franchiseFilter}*`,
+        ),
+      );
     })();
   }, [props.user, franchisePage, franchiseFilter]);
 
   React.useEffect(() => {
     if (activeTab !== 'users') return;
     (async () => {
-      setUserList(await pizzaService.getUsers(userPage, 3, `*${userFilter}*`));
+      setUserList(
+        await pizzaService.getUsers(
+          userPage,
+          USER_PAGE_SIZE,
+          `*${userFilter}*`,
+        ),
+      );
     })();
   }, [props.user, activeTab, userPage, userFilter]);
 
@@ -266,7 +281,7 @@ export default function AdminDashboard(props: Props) {
                     <FilterPagination
                       placeholder="Filter users"
                       page={userPage}
-                      firstPage={1}
+                      firstPage={0}
                       more={userList.more}
                       columnCount={4}
                       onPageChange={setUserPage}

@@ -56,7 +56,11 @@ export default function DeleteUser() {
             {error}
           </p>
         )}
-        <Button title="Delete" onPress={deleteUser} />
+        <Button
+          title="Delete"
+          onPress={deleteUser}
+          disabled={!state?.user?.id}
+        />
         <Button
           title="Cancel"
           onPress={navigateToParent}
