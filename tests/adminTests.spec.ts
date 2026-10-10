@@ -139,6 +139,21 @@ test("admin dashboard", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("admin dashboard tabs switch between franchises and users", async ({
+  page,
+}) => {
+  await basicInit(page);
+  await openAdminDashboard(page);
+
+  await page.getByRole("tab", { name: "Users" }).click();
+  await expect(page.getByRole("tabpanel")).toContainText(
+    "User listing will be added next.",
+  );
+
+  await page.getByRole("tab", { name: "Franchises" }).click();
+  await expect(page.getByRole("tabpanel")).toContainText("LotaPizza");
+});
+
 test("admin can filter franchises", async ({ page }) => {
   await basicInit(page);
 
