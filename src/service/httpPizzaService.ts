@@ -2,6 +2,7 @@ import {
   PizzaService,
   Franchise,
   FranchiseList,
+  UserList,
   Store,
   OrderHistory,
   User,
@@ -142,6 +143,23 @@ class HttpPizzaService implements PizzaService {
     return this.callEndpoint(
       `/api/franchise?${query.toString()}`,
     );
+  }
+
+  async getUsers(
+    page: number = 1,
+    limit: number = 10,
+    nameFilter: string = "*",
+  ): Promise<UserList> {
+    const query = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      name: nameFilter,
+    });
+    return this.callEndpoint(`/api/user?${query.toString()}`);
+  }
+
+  async deleteUser(userId: string): Promise<{ deleted: boolean }> {
+    return this.callEndpoint(`/api/user/${encodeURIComponent(userId)}`, "DELETE");
   }
 
   async closeFranchise(franchise: Franchise): Promise<void> {

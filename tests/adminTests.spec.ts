@@ -1,6 +1,6 @@
 import { Page } from "@playwright/test";
 import { test, expect } from "./testSetup";
-import { Franchise, Role } from "../src/service/pizzaService";
+import { Franchise, Role, User } from "../src/service/pizzaService";
 import {
   mockAuthentication,
   mockMenu,
@@ -31,6 +31,12 @@ async function basicInit(page: Page, role: Role = Role.Admin) {
       name: "Slice City",
       stores: [{ id: "8", name: "Provo", totalRevenue: 75 }],
     },
+  ];
+  const users: User[] = [
+    { id: "10", name: "Ada User", email: "ada@jwt.com", roles: [{ role: Role.Diner }] },
+    { id: "11", name: "Bill User", email: "bill@jwt.com", roles: [{ role: Role.Franchisee, objectId: "2" }] },
+    { id: "12", name: "Cora User", email: "cora@jwt.com", roles: [{ role: Role.Admin }] },
+    { id: "13", name: "Dino User", email: "dino@jwt.com", roles: [{ role: Role.Diner }] },
   ];
   let nextFranchiseId = 5;
   await mockAuthentication(page, [
@@ -111,6 +117,36 @@ async function basicInit(page: Page, role: Role = Role.Admin) {
     await route.fulfill({ json: null });
   });
 
+  await page.route(/\/api\/user(?:\?.*)?$/, async (route) => {
+    expect(route.request().method()).toBe("GET");
+    const url = new URL(route.request().url());
+    const pageNumber = Number(url.searchParams.get("page") ?? 1);
+    const limit = Number(url.searchParams.get("limit") ?? 10);
+    const nameFilter = (url.searchParams.get("name") ?? "*")
+      .replace(/\*/g, "")
+      .toLowerCase();
+    const matchingUsers = users.filter((user) =>
+      user.name?.toLowerCase().includes(nameFilter),
+    );
+    const start = (pageNumber - 1) * limit;
+    const pagedUsers = matchingUsers.slice(start, start + limit);
+    await route.fulfill({
+      json: {
+        users: pagedUsers,
+        more: start + pagedUsers.length < matchingUsers.length,
+      },
+    });
+  });
+
+  await page.route(/\/api\/user\/(?!me$)[^/]+$/, async (route) => {
+    expect(route.request().method()).toBe("DELETE");
+    const userId = new URL(route.request().url()).pathname.split("/").pop();
+    const userIndex = users.findIndex((user) => user.id === userId);
+    expect(userIndex).not.toBe(-1);
+    users.splice(userIndex, 1);
+    await route.fulfill({ json: { deleted: true } });
+  });
+
   await mockOrders(page);
 
   await page.goto("/");
@@ -146,12 +182,45 @@ test("admin dashboard tabs switch between franchises and users", async ({
   await openAdminDashboard(page);
 
   await page.getByRole("tab", { name: "Users" }).click();
-  await expect(page.getByRole("tabpanel")).toContainText(
-    "User listing will be added next.",
-  );
+  await expect(page.getByRole("tabpanel")).toContainText("Ada User");
 
   await page.getByRole("tab", { name: "Franchises" }).click();
   await expect(page.getByRole("tabpanel")).toContainText("LotaPizza");
+});
+
+test("admin can filter and paginate users", async ({ page }) => {
+  await basicInit(page);
+  await openAdminDashboard(page);
+  await page.getByRole("tab", { name: "Users" }).click();
+
+  await expect(page.getByRole("table")).toContainText("Ada User");
+  await expect(page.getByRole("table")).not.toContainText("Dino User");
+  await page.getByRole("button", { name: "Next page" }).click();
+  await expect(page.getByRole("table")).toContainText("Dino User");
+
+  await page.getByRole("textbox", { name: "Filter users" }).fill("Cora");
+  await page.getByRole("button", { name: "Submit" }).click();
+  await expect(page.getByRole("table")).toContainText("Cora User");
+  await expect(page.getByRole("table")).not.toContainText("Ada User");
+  await expect(page.getByRole("button", { name: "Previous page" })).toBeDisabled();
+});
+
+test("admin can delete a user", async ({ page }) => {
+  await basicInit(page);
+  await openAdminDashboard(page);
+  await page.getByRole("tab", { name: "Users" }).click();
+
+  await page.getByRole("row", { name: "Ada User ada@jwt.com diner Delete" })
+    .getByRole("button", { name: "Delete" })
+    .click();
+  await expect(page.getByRole("heading", { name: "Sorry to see you go" })).toBeVisible();
+  await expect(page.getByText(/Are you sure you want to delete Ada User/)).toBeVisible();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("tab", { name: "Users" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByRole("table")).not.toContainText("Ada User");
 });
 
 test("admin can filter franchises", async ({ page }) => {
@@ -159,7 +228,7 @@ test("admin can filter franchises", async ({ page }) => {
 
   await openAdminDashboard(page);
 
-  await page.getByRole("button", { name: "»" }).click();
+  await page.getByRole("button", { name: "Next page" }).click();
   await expect(page.getByRole("table")).toContainText("Slice City");
 
   await page
@@ -169,7 +238,7 @@ test("admin can filter franchises", async ({ page }) => {
 
   await expect(page.getByRole("table")).toContainText("PizzaCorp");
   await expect(page.getByRole("table")).not.toContainText("LotaPizza");
-  await expect(page.getByRole("button", { name: "«" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Previous page" })).toBeDisabled();
 });
 
 test("admin can paginate franchises", async ({ page }) => {
@@ -177,8 +246,8 @@ test("admin can paginate franchises", async ({ page }) => {
 
   await openAdminDashboard(page);
 
-  const nextPage = page.getByRole("button", { name: "»" });
-  const previousPage = page.getByRole("button", { name: "«" });
+  const nextPage = page.getByRole("button", { name: "Next page" });
+  const previousPage = page.getByRole("button", { name: "Previous page" });
   await expect(previousPage).toBeDisabled();
   await expect(nextPage).toBeEnabled();
 

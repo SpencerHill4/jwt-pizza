@@ -1,29 +1,105 @@
 import React from 'react';
 import View from './view';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import NotFound from './notFound';
 import Button from '../components/button';
 import { pizzaService } from '../service/service';
-import { Franchise, FranchiseList, Role, Store, User } from '../service/pizzaService';
+import { Franchise, FranchiseList, Role, Store, User, UserList } from '../service/pizzaService';
 import { TrashIcon } from '../icons';
 
 interface Props {
   user: User | null;
 }
 
+interface FilterPaginationProps {
+  placeholder: string;
+  page: number;
+  firstPage: number;
+  more: boolean;
+  columnCount: number;
+  onPageChange: (page: number) => void;
+  onFilter: (filter: string) => void;
+}
+
+function FilterPagination(props: FilterPaginationProps) {
+  const [filterInput, setFilterInput] = React.useState('');
+
+  function submitFilter(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    props.onPageChange(props.firstPage);
+    props.onFilter(filterInput);
+  }
+
+  return (
+    <tfoot>
+      <tr>
+        <td className="px-1 py-1">
+          <form onSubmit={submitFilter}>
+            <input
+              type="text"
+              value={filterInput}
+              onChange={(event) => setFilterInput(event.target.value)}
+              placeholder={props.placeholder}
+              className="px-2 py-1 text-sm border border-gray-300 rounded-lg"
+            />
+            <button
+              type="submit"
+              className="ml-2 px-2 py-1 text-sm font-semibold rounded-lg border border-orange-400 text-orange-400 hover:border-orange-800 hover:text-orange-800"
+            >
+              Submit
+            </button>
+          </form>
+        </td>
+        <td colSpan={props.columnCount - 1} className="text-end text-sm font-medium">
+          <button
+            type="button"
+            className="w-12 p-1 text-sm font-semibold rounded-lg border border-transparent bg-white text-grey border-grey m-1 hover:bg-orange-200 disabled:bg-neutral-300"
+            onClick={() => props.onPageChange(props.page - 1)}
+            disabled={props.page <= props.firstPage}
+            aria-label="Previous page"
+          >
+            «
+          </button>
+          <button
+            type="button"
+            className="w-12 p-1 text-sm font-semibold rounded-lg border border-transparent bg-white text-grey border-grey m-1 hover:bg-orange-200 disabled:bg-neutral-300"
+            onClick={() => props.onPageChange(props.page + 1)}
+            disabled={!props.more}
+            aria-label="Next page"
+          >
+            »
+          </button>
+        </td>
+      </tr>
+    </tfoot>
+  );
+}
+
 export default function AdminDashboard(props: Props) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = React.useState<'franchises' | 'users'>('franchises');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = React.useState<'franchises' | 'users'>(
+    location.state?.activeTab === 'users' ? 'users' : 'franchises',
+  );
   const [franchiseList, setFranchiseList] = React.useState<FranchiseList>({ franchises: [], more: false });
   const [franchisePage, setFranchisePage] = React.useState(0);
   const [franchiseFilter, setFranchiseFilter] = React.useState('');
-  const filterFranchiseRef = React.useRef<HTMLInputElement>(null);
+  const [userList, setUserList] = React.useState<UserList>({ users: [], more: false });
+  const [userPage, setUserPage] = React.useState(1);
+  const [userFilter, setUserFilter] = React.useState('');
 
   React.useEffect(() => {
     (async () => {
       setFranchiseList(await pizzaService.getFranchises(franchisePage, 3, `*${franchiseFilter}*`));
     })();
   }, [props.user, franchisePage, franchiseFilter]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'users') return;
+    (async () => {
+      setUserList(await pizzaService.getUsers(userPage, 3, `*${userFilter}*`));
+    })();
+  }, [props.user, activeTab, userPage, userFilter]);
 
   function createFranchise() {
     navigate('/admin-dashboard/create-franchise');
@@ -37,10 +113,10 @@ export default function AdminDashboard(props: Props) {
     navigate('/admin-dashboard/close-store', { state: { franchise: franchise, store: store } });
   }
 
-  function filterFranchises(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFranchisePage(0);
-    setFranchiseFilter(filterFranchiseRef.current?.value ?? '');
+  function deleteUser(user: User) {
+    navigate('/admin-dashboard/delete-user', {
+      state: { user, activeTab: 'users' },
+    });
   }
 
   let response = <NotFound />;
@@ -128,26 +204,15 @@ export default function AdminDashboard(props: Props) {
                               </tbody>
                             );
                           })}
-                          <tfoot>
-                            <tr>
-                              <td className="px-1 py-1">
-                                <form onSubmit={filterFranchises}>
-                                  <input type="text" ref={filterFranchiseRef} name="filterFranchise" placeholder="Filter franchises" className="px-2 py-1 text-sm border border-gray-300 rounded-lg" />
-                                  <button type="submit" className="ml-2 px-2 py-1 text-sm font-semibold rounded-lg border border-orange-400 text-orange-400 hover:border-orange-800 hover:text-orange-800">
-                                    Submit
-                                  </button>
-                                </form>
-                              </td>
-                              <td colSpan={4} className="text-end text-sm font-medium">
-                                <button className="w-12 p-1 text-sm font-semibold rounded-lg border border-transparent bg-white text-grey border-grey m-1 hover:bg-orange-200 disabled:bg-neutral-300 " onClick={() => setFranchisePage(franchisePage - 1)} disabled={franchisePage <= 0}>
-                                  «
-                                </button>
-                                <button className="w-12 p-1 text-sm font-semibold rounded-lg border border-transparent bg-white text-grey border-grey m-1 hover:bg-orange-200 disabled:bg-neutral-300" onClick={() => setFranchisePage(franchisePage + 1)} disabled={!franchiseList.more}>
-                                  »
-                                </button>
-                              </td>
-                            </tr>
-                          </tfoot>
+                          <FilterPagination
+                            placeholder="Filter franchises"
+                            page={franchisePage}
+                            firstPage={0}
+                            more={franchiseList.more}
+                            columnCount={5}
+                            onPageChange={setFranchisePage}
+                            onFilter={setFranchiseFilter}
+                          />
                         </table>
                       </div>
                     </div>
@@ -170,12 +235,43 @@ export default function AdminDashboard(props: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-600">
-                          User listing will be added next.
-                        </td>
-                      </tr>
+                      {userList.users.map((user) => (
+                        <tr key={user.id ?? user.email} className="divide-y divide-gray-200">
+                          <td className="text-start px-2 whitespace-nowrap text-sm text-gray-800">{user.name}</td>
+                          <td className="text-start px-2 whitespace-nowrap text-sm text-gray-800">{user.email}</td>
+                          <td className="text-start px-2 whitespace-nowrap text-sm text-gray-800">
+                            {user.roles?.map(({ role }) => role).join(', ')}
+                          </td>
+                          <td className="px-6 py-1 whitespace-nowrap text-end text-sm font-medium">
+                            <button
+                              type="button"
+                              className="px-2 py-1 inline-flex items-center gap-x-2 text-sm font-semibold rounded-lg border border-orange-400 text-orange-400 hover:border-orange-800 hover:text-orange-800 disabled:opacity-50"
+                              onClick={() => deleteUser(user)}
+                              disabled={!user.id}
+                            >
+                              <TrashIcon />
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {userList.users.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-600">
+                            No users found.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
+                    <FilterPagination
+                      placeholder="Filter users"
+                      page={userPage}
+                      firstPage={1}
+                      more={userList.more}
+                      columnCount={4}
+                      onPageChange={setUserPage}
+                      onFilter={setUserFilter}
+                    />
                   </table>
                 </div>
               </div>
