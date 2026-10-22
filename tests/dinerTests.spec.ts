@@ -73,7 +73,9 @@ async function orderPizza(page: Page) {
   await page.getByRole("button", { name: "Checkout" }).click();
   await login(page, "d@jwt.com", "a");
   await page.getByRole("button", { name: "Pay now" }).click();
-  await expect(page.getByRole("heading")).toContainText("Here is your JWT Pizza!");
+  await expect(page.getByRole("heading")).toContainText(
+    "Here is your JWT Pizza!",
+  );
 }
 
 async function openDinerDashboard(page: Page) {
@@ -119,7 +121,9 @@ async function expectDocs(page: Page, path: string, apiHost: string) {
   });
 
   await page.goto(path);
-  await expect(page.getByRole("heading", { name: "JWT Pizza API" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "JWT Pizza API" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading").filter({ hasText: "[POST] /api/order" }),
   ).toContainText("🔐");
@@ -130,14 +134,14 @@ async function expectDocs(page: Page, path: string, apiHost: string) {
     page.getByRole("heading").filter({ hasText: "[GET] /api/order/menu" }),
   ).toBeVisible();
   await expect(page.getByText("Get the pizza menu")).toBeVisible();
-  await expect(page.locator('a[href*="localhost:3000"]')).toBeVisible();
+  await expect(page.locator('a[href*="' + apiHost + '"]')).toBeVisible();
   await expect(page.locator('a[href*="pizza-factory"]')).toBeVisible();
   expect(new URL(docsUrl).hostname).toContain(apiHost);
 }
 
 test("service API docs are displayed", async ({ page }) => {
   await basicInit(page);
-  await expectDocs(page, "/docs", "localhost");
+  await expectDocs(page, "/docs", "pizza-service.spencerhill.click"); //"localhost:3000";
 });
 
 test("factory API docs are displayed", async ({ page }) => {
@@ -210,7 +214,9 @@ test("delivery handles missing order state", async ({ page }) => {
   await basicInit(page);
   await page.goto("/delivery");
 
-  await expect(page.getByRole("heading")).toContainText("Here is your JWT Pizza!");
+  await expect(page.getByRole("heading")).toContainText(
+    "Here is your JWT Pizza!",
+  );
   await expect(page.getByText("error", { exact: true })).toBeVisible();
 });
 
@@ -220,9 +226,7 @@ test("delivery displays an error for an invalid JWT", async ({ page }) => {
 
   await page.getByRole("button", { name: "Verify" }).click();
   await expect(page.locator("#hs-jwt-modal h3")).toContainText("Invalid JWT");
-  await expect(page.locator("#hs-jwt-modal pre")).toContainText(
-    "bad pizza",
-  );
+  await expect(page.locator("#hs-jwt-modal pre")).toContainText("bad pizza");
 });
 
 test("about page", async ({ page }) => {
